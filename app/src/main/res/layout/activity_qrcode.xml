@@ -2,15 +2,21 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
-    <SurfaceView
+        android:layout_height="0dp"
+        android:layout_weight="4">
+
+        <SurfaceView
         android:id="@+id/surface_view_camera2_activity"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <LinearLayout
+        <LinearLayout
         android:layout_above="@id/surface_view_camera2_activity"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -47,4 +53,13 @@
             android:background="#99000000"/>
     </LinearLayout>
     </FrameLayout>
+    <TextView
+        android:id="@+id/result_text"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="结果显示在这！！！">
+    </TextView>
+    </LinearLayout>
 </RelativeLayout>

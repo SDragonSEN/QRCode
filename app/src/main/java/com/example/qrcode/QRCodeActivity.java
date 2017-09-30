@@ -28,11 +28,13 @@ import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.concurrent.TimeUnit;
 
 import jp.sourceforge.qrcode.QRCodeDecoder;
 import jp.sourceforge.qrcode.data.QRCodeImage;
@@ -53,11 +55,13 @@ public class QRCodeActivity extends AppCompatActivity{
     private SurfaceView mSurfaceView;
     private SurfaceHolder mSurfaceHolder;
     private CameraManager mCameraManager;//摄像头管理器
-    private Handler childHandler, mainHandler;
+    private Handler childHandler,mainHandler;
     private String mCameraID;//摄像头Id 0 为后  1 为前
     private ImageReader mImageReader;
     private CameraCaptureSession mCameraCaptureSession;
     private CameraDevice mCameraDevice;
+    private MyThread myThread = new MyThread();
+    private TextView mTextView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +69,7 @@ public class QRCodeActivity extends AppCompatActivity{
         //隐藏状态栏
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         setContentView(R.layout.activity_qrcode);
-        // 不支持Camera权限,则申请(遗留问题1:申请成功后，重启才生效)
+        // 不支持Camera权限,则申请(遗留问题:申请成功后，重启才生效)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED){
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 1);
         }
@@ -76,6 +80,7 @@ public class QRCodeActivity extends AppCompatActivity{
      * 初始化
      */
     private void initVIew() {
+        mTextView = (TextView) findViewById(R.id.result_text);
         //mSurfaceView
         mSurfaceView = (SurfaceView) findViewById(R.id.surface_view_camera2_activity);
 
@@ -89,30 +94,41 @@ public class QRCodeActivity extends AppCompatActivity{
         mainHandler = new Handler(getMainLooper());
         mCameraID = "" + CameraCharacteristics.LENS_FACING_FRONT;//后摄像头
         mImageReader = ImageReader.newInstance(1080, 1920, ImageFormat.JPEG,1);
-
+        myThread.start();
         mImageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() { //可以在这里处理拍照得到的临时照片 例如，写入本地
-            long lastTime = new Date().getTime();
+            //long lastTime = new Date().getTime();
             @Override
             public void onImageAvailable(ImageReader reader) {
-                long curTime = new Date().getTime();
                 //mCameraDevice.close();
-                // 拿到拍照照片数据
-                Image image = reader.acquireNextImage();
+                long curTime = new Date().getTime();
                 synchronized (this) {
-                    if (curTime - lastTime > 333) {
-                        lastTime = curTime;
-                        MyImagine myImagine = new MyImagine(image);
+
+                }
+                // 拿到拍照照片数据
+
+                Image image = reader.acquireNextImage();
+                //synchronized (this) {
+                    //if (curTime - lastTime > 333) {
+                        //lastTime = curTime;
+                        /*MyImagine myImagine = new MyImagine(image);
                         QRCodeDecoder decoder = new QRCodeDecoder();
                         try {
                             String decodedData = new String(decoder.decode(myImagine));
                             Toast.makeText(QRCodeActivity.this, decodedData, Toast.LENGTH_SHORT).show();
                         } catch (DecodingFailedException e) {
 
-                        }catch (Exception e1){
+                         }catch (Exception e1){
 
+                         }*/
+
+                        try {
+                            TimeUnit.MILLISECONDS.sleep(100);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
                         }
-                    }
-                }
+                    //}
+                 //}
+                myThread.bitmap = MyImagine.getBitmap(image);
                 image.close();
             }
         }, mainHandler);
@@ -192,10 +208,7 @@ public class QRCodeActivity extends AppCompatActivity{
         try {
             // 创建预览需要的CaptureRequest.Builder
             final CaptureRequest.Builder previewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            // 自动对焦
-            previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
-            // 打开闪光灯
-            previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+
             // 将SurfaceView的surface作为CaptureRequest.Builder的目标
             previewRequestBuilder.addTarget(mSurfaceHolder.getSurface());
             previewRequestBuilder.addTarget(mImageReader.getSurface());
@@ -209,9 +222,13 @@ public class QRCodeActivity extends AppCompatActivity{
                     // 当摄像头已经准备好时，开始显示预览
                     mCameraCaptureSession = cameraCaptureSession;
                     try {
+                        // 自动对焦
+                        previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE );
+                        // 打开闪光灯
+                        previewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
                         // 显示预览
                         CaptureRequest previewRequest = previewRequestBuilder.build();
-                        mCameraCaptureSession.setRepeatingRequest(previewRequest, null, childHandler);
+                        mCameraCaptureSession.setRepeatingRequest(previewRequest, null, null);
                     } catch (CameraAccessException e) {
                             e.printStackTrace();
                     }
@@ -221,9 +238,35 @@ public class QRCodeActivity extends AppCompatActivity{
                 public void onConfigureFailed(CameraCaptureSession cameraCaptureSession) {
                     Toast.makeText(QRCodeActivity.this, "配置失败", Toast.LENGTH_SHORT).show();
                 }
-            }, childHandler);
+            }, mainHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
+        }
+    }
+    class MyThread extends Thread{
+        Bitmap bitmap = null;
+
+        @Override
+        public void run(){
+            while(true){
+                if (bitmap != null){
+                    MyImagine myImagine = new MyImagine(bitmap);
+                    QRCodeDecoder decoder = new QRCodeDecoder();
+                    try {
+                        final String decodedData = new String(decoder.decode(myImagine));
+                        mainHandler.post(new Runnable() {
+                            @Override
+                            public void run(){
+                                mTextView.setText(decodedData);
+                            }
+                        });
+                    } catch (DecodingFailedException e) {
+
+                    }catch (Exception e1){
+
+                    }
+                }
+            }
         }
     }
 }
@@ -234,6 +277,15 @@ class MyImagine implements QRCodeImage{
         byte[] bytes = new byte[buffer.remaining()];
         buffer.get(bytes);//由缓冲区存入字节数组
         this.bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+    }
+    public MyImagine(Bitmap bitmap){
+        this.bitmap = bitmap;
+    }
+    public static Bitmap getBitmap(Image image){
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);//由缓冲区存入字节数组
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
     }
     @Override
     public int getWidth() {
